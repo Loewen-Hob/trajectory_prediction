@@ -1,4 +1,3 @@
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -11,34 +10,47 @@ plt.rcParams['axes.unicode_minus'] = False  # 正确显示负号
 
 
 class TrajectoryPredictor:
-    def __init__(self, csv_filepath, degree=2, grid_size=5):
+    def __init__(self, csv_filepath, degree=2, grid_size=10):
         """
         初始化轨迹预测器。
         :param csv_filepath: CSV文件路径。
         :param degree: 多项式拟合的度数。
         :param grid_size: 栅格化地图的大小。
+        :param coefficients: 多项式系数，从最高次幂到常数项
         """
         self.csv_filepath = csv_filepath
         self.degree = degree
         self.grid_size = grid_size
-        self.longitude, self.latitude, self.velocity = self.read_csv_for_fitting()  # 更新这行
+        self.longitude, self.latitude = self.read_csv_for_fitting()
         self.coefs = None
         self.fit_longitude = None
         self.fit_latitude = None
         self.probabilities = None
+
+    def get_curve_derivative_at_point(self, x):
+        """
+        计算给定点x处曲线的导数。
+        :param x: 经度点，用于计算导数
+        :return: 在点x处的导数值
+        """
+        # 创建多项式的导数对象
+        derivative_coefs = np.polyder(self.coefs)
+        # 计算并返回导数值
+        derivative_at_x = np.polyval(derivative_coefs, x)
+        return derivative_at_x
+
     def read_csv_for_fitting(self):
         """
-        从CSV文件中读取经纬度和速度数据。
-        :return: 经度、纬度和速度的numpy数组。
+        从CSV文件中读取经纬度数据。
+        :return: 经度和纬度的numpy数组。
         """
         data = pd.read_csv(self.csv_filepath)
-        if 'longitude' in data.columns and 'latitude' in data.columns and 'velocity' in data.columns:
+        if 'longitude' in data.columns and 'latitude' in data.columns:
             longitude = data['longitude'].to_numpy()
             latitude = data['latitude'].to_numpy()
-            velocity = data['velocity'].to_numpy()  # 读取速度数据
-            return longitude, latitude, velocity
+            return longitude, latitude
         else:
-            raise ValueError("CSV文件中缺少'longitude', 'latitude'或'velocity'列。")
+            raise ValueError("CSV文件中缺少'longitude'和'latitude'列。")
 
     def print_probability_distribution(self):
         # 确保概率矩阵已经被计算
@@ -54,7 +66,10 @@ class TrajectoryPredictor:
         """
         使用numpy的多项式工具进行多项式拟合。
         """
-        self.coefs = Polynomial.fit(self.longitude, self.latitude, self.degree).convert().coef
+        # 使用经度和纬度数据进行多项式拟合
+        p = Polynomial.fit(self.longitude, self.latitude, self.degree)
+        self.coefs = p.convert().coef
+        # 生成拟合数据用于绘图或其他目的
         self.fit_longitude = np.linspace(self.longitude.min(), self.longitude.max(), 100)
         self.fit_latitude = sum(self.coefs[i] * self.fit_longitude ** i for i in range(len(self.coefs)))
 
@@ -64,12 +79,9 @@ class TrajectoryPredictor:
         :param seconds_ahead: 预测的时间长度（秒）。
         :return: 预测的经度和纬度数组。
         """
-        future_time = np.linspace(0, seconds_ahead, 20)  # 减少到20个等间距的时间点
-        if len(self.velocity) > 0:  # 确保有速度数据
-            avg_velocity = np.mean(self.velocity)  # 使用平均速度作为未来速度的估计
-        else:
-            avg_velocity = 0.0001  # 如果没有速度数据，使用默认值
-        future_longitude = self.longitude[-1] + future_time * avg_velocity  # 使用实际速度计算
+        future_time = np.linspace(0, seconds_ahead, 50)  # 假设数据中每个点代表1秒
+        future_longitude = np.linspace(self.longitude[-1], self.longitude[-1] + future_time[-1] * 0.0001,
+                                       50)  # 假设速度大约是0.0001度/秒
         future_latitude = sum(self.coefs[i] * future_longitude ** i for i in range(len(self.coefs)))
         return future_longitude, future_latitude
 
@@ -88,71 +100,65 @@ class TrajectoryPredictor:
         plt.show()
 
     def calculate_probabilities(self):
-        """
-        根据速度信息和预测的未来位置来计算栅格化地图上的概率分布。
-        """
-        # 预测未来位置
-        future_longitude, future_latitude = self.predict_future_trajectory(seconds_ahead=60)  # 假设未来60秒的轨迹
+        if self.coefs is None:
+            raise ValueError("请先执行polynomial_fit方法进行多项式拟合")
 
-        # 创建栅格边界
-        x_edges = np.linspace(future_longitude.min() - 5 * 0.0001, future_longitude.max() + 5 * 0.0001,
-                              self.grid_size + 1)
-        y_edges = np.linspace(future_latitude.min() - 5 * 0.0001, future_latitude.max() + 5 * 0.0001,
-                              self.grid_size + 1)
+        center_longitude = self.longitude[-1]
+        center_latitude = self.latitude[-1]
 
-        # 计算栅格中心点
-        x_centers = (x_edges[:-1] + x_edges[1:]) / 2
-        y_centers = (y_edges[:-1] + y_edges[1:]) / 2
-        X, Y = np.meshgrid(x_centers, y_centers)
+        direction_vector = np.array([1, self.get_curve_derivative_at_point(center_longitude)])
+        direction_vector /= np.linalg.norm(direction_vector)
 
-        self.probabilities = np.zeros((self.grid_size, self.grid_size))
+        grid_size = self.grid_size
+        x_edges = np.linspace(center_longitude - 5 * 0.0001, center_longitude + 5 * 0.0001, grid_size + 1)
+        y_edges = np.linspace(center_latitude - 5 * 0.0001, center_latitude + 5 * 0.0001, grid_size + 1)
 
-        # 计算每个栅格的概率
-        for i in range(self.grid_size):
-            for j in range(self.grid_size):
-                distance = np.sqrt((X[i, j] - future_longitude.mean())**2 + (Y[i, j] - future_latitude.mean())**2)
-                self.probabilities[i, j] = np.exp(-distance * 10)  # 使用指数衰减函数调整概率
+        self.probabilities = np.zeros((grid_size, grid_size))
+        for i in range(grid_size):
+            for j in range(grid_size):
+                grid_vector = np.array([x_edges[i] - center_longitude, y_edges[j] - center_latitude])
+                distance = np.linalg.norm(grid_vector)
+                grid_vector /= distance if distance > 0 else 1
+                cos_angle = np.dot(grid_vector, direction_vector)
+                # 直接使用余弦相似度作为概率的基础，考虑到方向的一致性
+                self.probabilities[j, i] = max(cos_angle, 0)
 
-        # 归一化概率分布
-        self.probabilities /= self.probabilities.sum()
-
-        return self.probabilities, x_centers, y_centers
-
+        # 归一化概率，使得总和为1
+        total_prob = self.probabilities.sum()
+        self.probabilities /= total_prob
+        return self.probabilities, x_edges, y_edges
 
     def plot_probability_distribution(self):
-        """
-        绘制概率分布的热力图。
-        """
-        # 确保概率矩阵已经被计算
         if self.probabilities is None:
             raise ValueError("概率矩阵尚未计算。请先调用 calculate_probabilities 方法。")
 
-        # 计算栅格的大小和范围
         grid_size = self.grid_size
         x_min, x_max = self.longitude.min(), self.longitude.max()
         y_min, y_max = self.latitude.min(), self.latitude.max()
-        x_range = x_max - x_min
-        y_range = y_max - y_min
 
-        # 创建栅格的中心坐标
-        x_centers = np.linspace(x_min + x_range / 2 / grid_size, x_max - x_range / 2 / grid_size, grid_size)
-        y_centers = np.linspace(y_min + y_range / 2 / grid_size, y_max - y_range / 2 / grid_size, grid_size)
+        # 创建栅格的边界坐标
+        x_edges = np.linspace(x_min, x_max, grid_size + 1)
+        y_edges = np.linspace(y_min, y_max, grid_size + 1)
 
-        # 创建用于绘图的X和Y数组
-        X, Y = np.meshgrid(x_centers, y_centers)
-
-        # 绘制热力图
         plt.figure(figsize=(8, 6))
-        plt.contourf(X, Y, self.probabilities, levels=50, cmap='RdYlBu')
+        # 注意这里将概率矩阵转置，以确保与x_edges和y_edges的方向一致
+        plt.pcolormesh(x_edges, y_edges, self.probabilities.T, cmap='RdYlBu', shading='auto')
         plt.colorbar(label='概率')
         plt.xlabel('经度')
         plt.ylabel('纬度')
         plt.title('概率分布')
+
         # 在图上显示每个栅格的概率
-        for i in range(len(x_centers)):
-            for j in range(len(y_centers)):
-                plt.text(x_centers[i], y_centers[j], "{:.4f}".format(self.probabilities[j, i]),
-                         ha='center', va='center', color='black', fontsize=8)
+        x_centers = (x_edges[:-1] + x_edges[1:]) / 2
+        y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+        for i in range(grid_size):
+            for j in range(grid_size):
+                plt.text(x_centers[i], y_centers[j], "{:.2f}".format(self.probabilities[j, i]),
+                         ha='center', va='center', color='white' if self.probabilities[j, i] > 0.5 else 'black',
+                         fontsize=8)
+
+        plt.xlim(x_min, x_max)
+        plt.ylim(y_min, y_max)
         plt.show()
 
 
