@@ -10,7 +10,7 @@ plt.rcParams['axes.unicode_minus'] = False  # 正确显示负号
 
 
 class TrajectoryPredictor:
-    def __init__(self, csv_filepath, degree=2, grid_size=10):
+    def __init__(self, csv_filepath, degree=2, grid_size=5):
         """
         初始化轨迹预测器。
         :param csv_filepath: CSV文件路径。
@@ -27,18 +27,6 @@ class TrajectoryPredictor:
         self.fit_latitude = None
         self.probabilities = None
 
-    def get_curve_derivative_at_point(self, x):
-        """
-        计算给定点x处曲线的导数。
-        :param x: 经度点，用于计算导数
-        :return: 在点x处的导数值
-        """
-        # 创建多项式的导数对象
-        derivative_coefs = np.polyder(self.coefs)
-        # 计算并返回导数值
-        derivative_at_x = np.polyval(derivative_coefs, x)
-        return derivative_at_x
-
     def read_csv_for_fitting(self):
         """
         从CSV文件中读取经纬度数据。
@@ -53,11 +41,13 @@ class TrajectoryPredictor:
             raise ValueError("CSV文件中缺少'longitude'和'latitude'列。")
 
     def print_probability_distribution(self):
+        """
+        打印概率矩阵。
+        """
         # 确保概率矩阵已经被计算
         if not hasattr(self, 'probabilities'):
             raise ValueError("概率矩阵尚未计算。请先调用 calculate_probabilities 方法。")
 
-        # 遍历概率矩阵并打印每个栅格的概率
         for i in range(len(self.probabilities)):
             for j in range(len(self.probabilities[0])):
                 print(f"栅格({i},{j})的概率: {self.probabilities[i, j]:.4f}")
@@ -66,10 +56,9 @@ class TrajectoryPredictor:
         """
         使用numpy的多项式工具进行多项式拟合。
         """
-        # 使用经度和纬度数据进行多项式拟合
         p = Polynomial.fit(self.longitude, self.latitude, self.degree)
         self.coefs = p.convert().coef
-        # 生成拟合数据用于绘图或其他目的
+
         self.fit_longitude = np.linspace(self.longitude.min(), self.longitude.max(), 100)
         self.fit_latitude = sum(self.coefs[i] * self.fit_longitude ** i for i in range(len(self.coefs)))
 
@@ -120,13 +109,21 @@ class TrajectoryPredictor:
                 distance = np.linalg.norm(grid_vector)
                 grid_vector /= distance if distance > 0 else 1
                 cos_angle = np.dot(grid_vector, direction_vector)
-                # 直接使用余弦相似度作为概率的基础，考虑到方向的一致性
                 self.probabilities[j, i] = max(cos_angle, 0)
 
-        # 归一化概率，使得总和为1
         total_prob = self.probabilities.sum()
         self.probabilities /= total_prob
         return self.probabilities, x_edges, y_edges
+
+    def get_curve_derivative_at_point(self, x):
+        """
+        计算给定点x处曲线的导数。
+        :param x: 经度点，用于计算导数
+        :return: 在点x处的导数值
+        """
+        p_derivative = Polynomial(self.coefs).deriv()
+        derivative_at_x = p_derivative(x)
+        return derivative_at_x
 
     def plot_probability_distribution(self):
         if self.probabilities is None:
@@ -136,19 +133,17 @@ class TrajectoryPredictor:
         x_min, x_max = self.longitude.min(), self.longitude.max()
         y_min, y_max = self.latitude.min(), self.latitude.max()
 
-        # 创建栅格的边界坐标
         x_edges = np.linspace(x_min, x_max, grid_size + 1)
         y_edges = np.linspace(y_min, y_max, grid_size + 1)
 
         plt.figure(figsize=(8, 6))
-        # 注意这里将概率矩阵转置，以确保与x_edges和y_edges的方向一致
-        plt.pcolormesh(x_edges, y_edges, self.probabilities.T, cmap='RdYlBu', shading='auto')
+
+        plt.pcolormesh(x_edges, y_edges, self.probabilities, cmap='RdYlBu', shading='auto')
         plt.colorbar(label='概率')
         plt.xlabel('经度')
         plt.ylabel('纬度')
         plt.title('概率分布')
 
-        # 在图上显示每个栅格的概率
         x_centers = (x_edges[:-1] + x_edges[1:]) / 2
         y_centers = (y_edges[:-1] + y_edges[1:]) / 2
         for i in range(grid_size):
@@ -173,5 +168,4 @@ predictor.plot_future_trajectory(future_longitude, future_latitude)
 probabilities, x_centers, y_centers = predictor.calculate_probabilities()
 print("Probabilities:")
 predictor.print_probability_distribution()
-
 predictor.plot_probability_distribution()
