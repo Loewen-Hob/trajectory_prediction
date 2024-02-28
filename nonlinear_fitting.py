@@ -164,7 +164,7 @@ class TrajectoryPredictor:
         plt.show()
 
 
-predictor = TrajectoryPredictor('test.csv')
+predictor = TrajectoryPredictor('data/test_1.csv')
 predictor.polynomial_fit()
 
 # 绘制车辆的当前拟合轨迹和未来轨迹
