@@ -109,10 +109,17 @@ class TrajectoryPredictor:
                 distance = np.linalg.norm(grid_vector)
                 grid_vector /= distance if distance > 0 else 1
                 cos_angle = np.dot(grid_vector, direction_vector)
-                self.probabilities[j, i] = max(cos_angle, 0)
+                # 增加放大概率值的方法，例如乘以一个常数
+                amplified_prob = max(cos_angle, 0) * 10  # 举例放大
+                self.probabilities[j, i] = amplified_prob
 
+        # 归一化概率，使得总和为1
         total_prob = self.probabilities.sum()
-        self.probabilities /= total_prob
+        if total_prob > 0:  # 防止除以零
+            self.probabilities /= total_prob
+        else:
+            raise ValueError("概率总和为零，无法归一化")
+
         return self.probabilities, x_edges, y_edges
 
     def get_curve_derivative_at_point(self, x):
