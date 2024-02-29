@@ -163,7 +163,7 @@ class TrajectoryPredictor:
         plt.ylim(y_min, y_max)
         plt.show()
 
-data = pd.read_csv('data/test.csv')
+data = pd.read_csv('../data/test.csv')
 
 grouped = data.groupby('vehicle_id')
 
