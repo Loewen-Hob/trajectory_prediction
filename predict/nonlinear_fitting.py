@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from numpy.polynomial.polynomial import Polynomial
-from scipy.optimize import curve_fit
+from coor_transform import BLH2XYZ
 
 # 设置matplotlib支持中文显示
 plt.rcParams['font.sans-serif'] = ['SimHei']  # 如果是在Windows系统使用'SimHei'
@@ -10,15 +10,14 @@ plt.rcParams['axes.unicode_minus'] = False  # 正确显示负号
 
 
 class TrajectoryPredictor:
-    def __init__(self, csv_filepath, degree=2, grid_size=5):
+    def __init__(self, data, degree=3, grid_size=10):
         """
         初始化轨迹预测器。
-        :param csv_filepath: CSV文件路径。
         :param degree: 多项式拟合的度数。
         :param grid_size: 栅格化地图的大小。
         :param coefficients: 多项式系数，从最高次幂到常数项
         """
-        self.csv_filepath = csv_filepath
+        self.data = data
         self.degree = degree
         self.grid_size = grid_size
         self.longitude, self.latitude = self.get_data_for_fitting()
@@ -32,13 +31,14 @@ class TrajectoryPredictor:
         从CSV文件中读取经纬度数据。
         :return: 经度和纬度的numpy数组。
         """
-        data = self.csv_filepath
-        if 'longitude' in data.columns and 'latitude' in data.columns:
-            longitude = data['longitude'].to_numpy()
-            latitude = data['latitude'].to_numpy()
+        data = self.data
+        # 暂定为x,y, z待定
+        if 'x' in data.columns and 'y' in data.columns:
+            longitude = data['x'].to_numpy()
+            latitude = data['y'].to_numpy()
             return longitude, latitude
         else:
-            raise ValueError("CSV文件中缺少'longitude'和'latitude'列。")
+            raise ValueError("CSV文件中缺少转换后的经坐标")
 
     def print_probability_distribution(self):
         """
@@ -62,11 +62,11 @@ class TrajectoryPredictor:
         self.fit_longitude = np.linspace(self.longitude.min(), self.longitude.max(), 100)
         self.fit_latitude = sum(self.coefs[i] * self.fit_longitude ** i for i in range(len(self.coefs)))
 
-    def predict_future_trajectory(self, seconds_ahead=5):
+    def predict_future_trajectory(self, seconds_ahead=10):
         """
         预测未来一段时间内的轨迹。
         :param seconds_ahead: 预测的时间长度（秒）。
-        :return: 预测的经度和纬度数组。
+        :return: 预测坐标数组。
         """
         future_time = np.linspace(0, seconds_ahead, 50)
         future_longitude = np.linspace(self.longitude[-1], self.longitude[-1] + future_time[-1] * 0.0001,
@@ -163,8 +163,17 @@ class TrajectoryPredictor:
 
 data = pd.read_csv('../data/test.csv')
 
-grouped = data.groupby('vehicle_id')
+data[["x", "y", "z"]] = data.apply(
+    lambda row: BLH2XYZ(row["longitude"], row["latitude"], 0,),
+    axis=1,
+    result_type="expand",
+)
 
+data["x"] = data["x"] - data["x"].min()
+data["y"] = data["y"] - data["y"].min()
+data["z"] = data["z"] - data["z"].min()
+
+grouped = data.groupby('vehicle_id')
 for vehicle_id, group in grouped:
     print(f"Processing vehicle_id: {vehicle_id}")
 
