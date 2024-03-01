@@ -12,7 +12,6 @@ angle2rad
        该函数把角度转换为弧度
 
 """
-import pandas as pd
 import math
 
 # a, b使用WGS-84椭球参数
