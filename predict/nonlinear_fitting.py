@@ -21,18 +21,18 @@ class TrajectoryPredictor:
         self.csv_filepath = csv_filepath
         self.degree = degree
         self.grid_size = grid_size
-        self.longitude, self.latitude = self.read_csv_for_fitting()
+        self.longitude, self.latitude = self.get_data_for_fitting()
         self.coefs = None
         self.fit_longitude = None
         self.fit_latitude = None
         self.probabilities = None
 
-    def read_csv_for_fitting(self):
+    def get_data_for_fitting(self):
         """
         从CSV文件中读取经纬度数据。
         :return: 经度和纬度的numpy数组。
         """
-        data = pd.read_csv(self.csv_filepath)
+        data = self.csv_filepath
         if 'longitude' in data.columns and 'latitude' in data.columns:
             longitude = data['longitude'].to_numpy()
             latitude = data['latitude'].to_numpy()
@@ -45,7 +45,7 @@ class TrajectoryPredictor:
         打印概率矩阵。
         """
         # 确保概率矩阵已经被计算
-        if not hasattr(self, 'probabilities'):
+        if self.probabilities is None:
             raise ValueError("概率矩阵尚未计算。请先调用 calculate_probabilities 方法。")
 
         for i in range(len(self.probabilities)):
@@ -68,9 +68,9 @@ class TrajectoryPredictor:
         :param seconds_ahead: 预测的时间长度（秒）。
         :return: 预测的经度和纬度数组。
         """
-        future_time = np.linspace(0, seconds_ahead, 50)  # 假设数据中每个点代表1秒
+        future_time = np.linspace(0, seconds_ahead, 50)
         future_longitude = np.linspace(self.longitude[-1], self.longitude[-1] + future_time[-1] * 0.0001,
-                                       50)  # 假设速度大约是0.0001度/秒
+                                       50)
         future_latitude = sum(self.coefs[i] * future_longitude ** i for i in range(len(self.coefs)))
         return future_longitude, future_latitude
 
@@ -85,7 +85,7 @@ class TrajectoryPredictor:
         plt.xlabel('经度')
         plt.ylabel('纬度')
         plt.legend()
-        plt.title('车辆轨迹预测')
+        plt.title(f'{vehicle_id} 车辆轨迹预测')
         plt.show()
 
     def calculate_probabilities(self):
@@ -109,16 +109,14 @@ class TrajectoryPredictor:
                 distance = np.linalg.norm(grid_vector)
                 grid_vector /= distance if distance > 0 else 1
                 cos_angle = np.dot(grid_vector, direction_vector)
-                # 增加放大概率值的方法，例如乘以一个常数
-                amplified_prob = max(cos_angle, 0) * 10  # 举例放大
+
+                amplified_prob = max(cos_angle, 0) * 10
                 self.probabilities[j, i] = amplified_prob
 
-        # 归一化概率，使得总和为1
-        total_prob = self.probabilities.sum()
-        if total_prob > 0:  # 防止除以零
-            self.probabilities /= total_prob
-        else:
-            raise ValueError("概率总和为零，无法归一化")
+        # 使用softmax归一化
+        probabilities_exp = np.exp(self.probabilities)
+        total_sum = probabilities_exp.sum()
+        self.probabilities = probabilities_exp / total_sum
 
         return self.probabilities, x_edges, y_edges
 
@@ -149,7 +147,7 @@ class TrajectoryPredictor:
         plt.colorbar(label='概率')
         plt.xlabel('经度')
         plt.ylabel('纬度')
-        plt.title('概率分布')
+        plt.title(f'{vehicle_id} 概率分布')
 
         x_centers = (x_edges[:-1] + x_edges[1:]) / 2
         y_centers = (y_edges[:-1] + y_edges[1:]) / 2
@@ -163,16 +161,22 @@ class TrajectoryPredictor:
         plt.ylim(y_min, y_max)
         plt.show()
 
+data = pd.read_csv('../data/test.csv')
 
-predictor = TrajectoryPredictor('../data/test_1.csv')
-predictor.polynomial_fit()
+grouped = data.groupby('vehicle_id')
 
-# 绘制车辆的当前拟合轨迹和未来轨迹
-future_longitude, future_latitude = predictor.predict_future_trajectory()
-predictor.plot_future_trajectory(future_longitude, future_latitude)
+for vehicle_id, group in grouped:
+    print(f"Processing vehicle_id: {vehicle_id}")
 
-# 计算概率分布并绘制栅格化地图的概率分布图
-probabilities, x_centers, y_centers = predictor.calculate_probabilities()
-print("Probabilities:")
-predictor.print_probability_distribution()
-predictor.plot_probability_distribution()
+    predictor = TrajectoryPredictor(group)
+    predictor.polynomial_fit()
+
+    # 绘制车辆的当前拟合轨迹和未来轨迹
+    future_longitude, future_latitude = predictor.predict_future_trajectory()
+    predictor.plot_future_trajectory(future_longitude, future_latitude)
+
+    # 计算概率分布并绘制栅格化地图的概率分布图
+    probabilities, x_centers, y_centers = predictor.calculate_probabilities()
+    print(f"{vehicle_id} Probabilities:")
+    predictor.print_probability_distribution()
+    predictor.plot_probability_distribution()
