@@ -3,11 +3,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from numpy.polynomial.polynomial import Polynomial
 from coor_transform import BLH2XYZ
-
+from data_hub import hub_manager
 # 设置matplotlib支持中文显示
 plt.rcParams['font.sans-serif'] = ['SimHei']  # 如果是在Windows系统使用'SimHei'
 plt.rcParams['axes.unicode_minus'] = False  # 正确显示负号
-
+from data.dataset import data
 
 class TrajectoryPredictor:
     def __init__(self, data, degree=3, grid_size=10):
@@ -161,7 +161,7 @@ class TrajectoryPredictor:
         plt.ylim(y_min, y_max)
         plt.show()
 
-data = pd.read_csv('../data/test.csv')
+data = data
 
 data[["x", "y", "z"]] = data.apply(
     lambda row: BLH2XYZ(row["longitude"], row["latitude"], 0,),
@@ -173,7 +173,7 @@ data["x"] = data["x"] - data["x"].min()
 data["y"] = data["y"] - data["y"].min()
 data["z"] = data["z"] - data["z"].min()
 
-grouped = data.groupby('vehicle_id')
+grouped = data.groupby('unit_id')
 for vehicle_id, group in grouped:
     print(f"Processing vehicle_id: {vehicle_id}")
 
