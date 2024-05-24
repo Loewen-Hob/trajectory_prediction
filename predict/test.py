@@ -1,5 +1,6 @@
 import pandas as pd
 from predict.nonlinear_fitting import TrajectoryPredictor
+from threat_posture.threat_posture import LocTransform
 import numpy as np
 
 data = pd.read_csv('../data_old/test.csv')

@@ -183,7 +183,6 @@ def process_park_data(image_path, converted_data, threat_radius=100):
             threat_map = update_threat_with_cover(park, unit_x_scaled, unit_y_scaled, threat_radius_scaled)
             park_total = np.where(park != -1, park_total + threat_map, -1)
             plt.imshow(park_total, cmap='gray', interpolation='none')
-
     return park_total
 
 if __name__ == '__main__':
