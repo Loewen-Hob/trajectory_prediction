@@ -189,3 +189,5 @@ def process_park_data(image_path, converted_data, threat_radius=100):
 if __name__ == '__main__':
     converted_data = convert_coordinates(collect_data_for_duration(20))
     process_park_data('占位图.jpg', converted_data)
+
+

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from numpy.polynomial.polynomial import Polynomial
-from coor_transform import BLH2XYZ
+from data.coor_transform import BLH2XYZ
 from data_hub import hub_manager
 # 设置matplotlib支持中文显示
 plt.rcParams['font.sans-serif'] = ['SimHei']  # 如果是在Windows系统使用'SimHei'
@@ -10,7 +10,7 @@ plt.rcParams['axes.unicode_minus'] = False  # 正确显示负号
 from data.dataset import data
 
 class TrajectoryPredictor:
-    def __init__(self, data, degree=3, grid_size=10):
+    def __init__(self, vehicle_id, data, degree=3, grid_size=10):
         """
         初始化轨迹预测器。
         :param degree: 多项式拟合的度数。
@@ -18,6 +18,7 @@ class TrajectoryPredictor:
         :param coefficients: 多项式系数，从最高次幂到常数项
         """
         self.data = data
+        self.vehicle_id = vehicle_id
         self.degree = degree
         self.grid_size = grid_size
         self.longitude, self.latitude = self.get_data_for_fitting()
@@ -74,7 +75,7 @@ class TrajectoryPredictor:
         future_latitude = sum(self.coefs[i] * future_longitude ** i for i in range(len(self.coefs)))
         return future_longitude, future_latitude
 
-    def plot_future_trajectory(self, future_longitude, future_latitude):
+    def plot_future_trajectory(self, vehicle_id, future_longitude, future_latitude):
         """
         绘制车辆的当前拟合轨迹和未来轨迹。
         """
@@ -130,7 +131,7 @@ class TrajectoryPredictor:
         derivative_at_x = p_derivative(x)
         return derivative_at_x
 
-    def plot_probability_distribution(self):
+    def plot_probability_distribution(self, vehicle_id):
         if self.probabilities is None:
             raise ValueError("概率矩阵尚未计算。请先调用 calculate_probabilities 方法。")
 
@@ -161,31 +162,29 @@ class TrajectoryPredictor:
         plt.ylim(y_min, y_max)
         plt.show()
 
-data = data
-
-data[["x", "y", "z"]] = data.apply(
-    lambda row: BLH2XYZ(row["longitude"], row["latitude"], 0,),
-    axis=1,
-    result_type="expand",
-)
-
-data["x"] = data["x"] - data["x"].min()
-data["y"] = data["y"] - data["y"].min()
-data["z"] = data["z"] - data["z"].min()
-
-grouped = data.groupby('unit_id')
-for vehicle_id, group in grouped:
-    print(f"Processing vehicle_id: {vehicle_id}")
-
-    predictor = TrajectoryPredictor(group)
-    predictor.polynomial_fit()
-
-    # 绘制车辆的当前拟合轨迹和未来轨迹
-    future_longitude, future_latitude = predictor.predict_future_trajectory()
-    predictor.plot_future_trajectory(future_longitude, future_latitude)
-
-    # 计算概率分布并绘制栅格化地图的概率分布图
-    probabilities, x_centers, y_centers = predictor.calculate_probabilities()
-    print(f"{vehicle_id} Probabilities:")
-    predictor.print_probability_distribution()
-    predictor.plot_probability_distribution()
+# data[["x", "y", "z"]] = data.apply(
+#     lambda row: BLH2XYZ(row["longitude"], row["latitude"], 0,),
+#     axis=1,
+#     result_type="expand",
+# )
+#
+# data["x"] = data["x"] - data["x"].min()
+# data["y"] = data["y"] - data["y"].min()
+# data["z"] = data["z"] - data["z"].min()
+#
+# grouped = data.groupby('unit_id')
+# for vehicle_id, group in grouped:
+#     print(f"Processing vehicle_id: {vehicle_id}")
+#
+#     predictor = TrajectoryPredictor(vehicle_id, group)
+#     predictor.polynomial_fit()
+#
+#     # 绘制车辆的当前拟合轨迹和未来轨迹
+#     future_longitude, future_latitude = predictor.predict_future_trajectory()
+#     predictor.plot_future_trajectory(future_longitude, future_latitude)
+#
+#     # 计算概率分布并绘制栅格化地图的概率分布图
+#     probabilities, x_centers, y_centers = predictor.calculate_probabilities()
+#     print(f"{vehicle_id} Probabilities:")
+#     predictor.print_probability_distribution()
+#     predictor.plot_probability_distribution()
